@@ -1,0 +1,1332 @@
+<!DOCTYPE html>
+<!--
+  ═══════════════════════════════════════════════════════════════════
+  LUEUR — Salon de discussion en temps réel (100% frontend, Firebase)
+  ═══════════════════════════════════════════════════════════════════
+
+  Ce fichier est autonome : HTML + CSS + JS dans un seul document.
+  Le backend est entièrement assuré par Firebase (Realtime Database
+  pour les messages/présence/frappe, Storage pour les images).
+  Aucun serveur à héberger, aucun build, aucun Node.js.
+
+  ───────────────────────────────────────────────────────────
+  1) CRÉER UN PROJET FIREBASE
+  ───────────────────────────────────────────────────────────
+  - Aller sur https://console.firebase.google.com
+  - "Ajouter un projet" → nommez-le → l'étape Google Analytics est
+    optionnelle, vous pouvez la désactiver (pas utile ici) → Créer
+  - Une fois le projet créé : icône Web ( </> ) → "Ajouter une
+    application" → donnez un surnom → NE COCHEZ PAS "Firebase
+    Hosting" (on déploie sur GitHub Pages) → Enregistrer
+  - Firebase affiche un objet `firebaseConfig` : gardez cet onglet
+    ouvert, vous en aurez besoin à l'étape 4.
+
+  ───────────────────────────────────────────────────────────
+  2) ACTIVER REALTIME DATABASE (mode test)
+  ───────────────────────────────────────────────────────────
+  - Menu de gauche → "Realtime Database" → "Créer une base de
+    données"
+  - Choisissez une région (ex : europe-west1 (Belgique), la plus
+    proche de la France)
+  - Sélectionnez "Démarrer en mode test" (accès libre 30 jours —
+    voir la note SÉCURITÉ plus bas)
+  - Une fois créée, copiez l'URL affichée tout en haut de la page
+    (ex : https://votre-projet-default-rtdb.europe-west1.firebasedatabase.app)
+    → c'est votre `databaseURL`
+
+  ───────────────────────────────────────────────────────────
+  3) ACTIVER STORAGE (pour les images)
+  ───────────────────────────────────────────────────────────
+  - Menu de gauche → "Storage" → "Commencer"
+  - ⚠️ Depuis fin 2024, Firebase exige le plan "Blaze" (paiement à
+    l'usage, carte bancaire requise) pour utiliser Storage — même
+    pour un salon entre amis avec un usage minime. Un quota gratuit
+    généreux reste inclus et vous ne devriez rien payer pour ce
+    genre d'usage, mais l'ajout d'une carte est obligatoire.
+  - Choisissez une région : us-central1 / us-east1 / us-west1 si
+    vous voulez rester strictement sur le palier "Always Free" de
+    Google Cloud, sinon prenez la région la plus proche de vous
+    (le coût réel restera négligeable pour ce type d'usage)
+  - "Démarrer en mode test"
+
+  ───────────────────────────────────────────────────────────
+  4) COLLER VOTRE CONFIGURATION
+  ───────────────────────────────────────────────────────────
+  Repérez le bloc `firebaseConfig` un peu plus bas dans ce fichier
+  (Ctrl+F "VOTRE_API_KEY") et remplacez chaque valeur par celle de
+  votre projet. Tant que ce n'est pas fait, la page affiche un
+  écran d'avertissement au lieu du salon.
+
+  ───────────────────────────────────────────────────────────
+  5) DÉPLOYER SUR GITHUB PAGES
+  ───────────────────────────────────────────────────────────
+  - Ajoutez ce fichier à la racine d'un repo GitHub sous le nom
+    `index.html`
+  - Settings → Pages → Source : "Deploy from a branch" → branche
+    main, dossier /(root) → Save
+  - Le salon sera en ligne à l'URL indiquée après 1-2 minutes
+
+  ───────────────────────────────────────────────────────────
+  ⚠️ SÉCURITÉ — à lire avant de partager le lien largement
+  ───────────────────────────────────────────────────────────
+  - Le "mode test" laisse la base de données ET le stockage
+    ENTIÈREMENT ouverts en lecture/écriture à quiconque connaît
+    l'URL, pendant 30 jours. Parfait pour tester vite. Si vous
+    gardez ce salon longtemps ou le partagez largement, durcissez
+    les règles (onglets "Règles" de Realtime Database et de
+    Storage) — des exemples prêts à coller sont fournis en
+    commentaire tout en bas de ce fichier.
+  - Les salons privés sont privés par obscurité du code, pas par
+    un vrai contrôle d'accès : sans authentification, quiconque
+    lirait la base brute pourrait tout voir. Suffisant entre amis,
+    pas pour des données sensibles.
+  - Aucune modération automatique des images envoyées n'est mise
+    en place.
+  ═══════════════════════════════════════════════════════════════════
+-->
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Lueur — un salon de discussion en temps réel, léger et privé.">
+<title>Lueur — Salon de discussion</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🕯️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   RESET & VARIABLES
+   ============================================================ */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* Neutres — nuit froide */
+  --night: #0b0d12;
+  --night-2: #12151d;
+  --panel: #161a24;
+  --slate: #1b212c;
+  --slate-2: #222836;
+  --border: #262c3a;
+  --border-soft: #1f2430;
+
+  /* Texte */
+  --paper: #edeff5;
+  --mist: #9099ad;
+  --mist-dim: #626a7d;
+
+  /* Lueur — accent chaud */
+  --ember: #e4a45c;
+  --ember-soft: #f0c185;
+  --ember-deep: #b8752f;
+  --wine: #9a4258;
+  --wine-soft: #c96a80;
+  --danger: #d1546b;
+
+  /* Typo */
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  /* Forme */
+  --radius: 18px;
+  --radius-sm: 10px;
+  --radius-lg: 26px;
+  --shadow: 0 20px 50px rgba(0,0,0,.45);
+}
+
+html, body { height: 100%; }
+
+body {
+  background: radial-gradient(ellipse 80% 60% at 50% -10%, #1a1e2c 0%, var(--night) 55%), var(--night);
+  color: var(--paper);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+button, input, textarea { font-family: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: none; }
+
+:focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.hidden { display: none !important; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--slate-2); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--border); background-clip: padding-box; }
+
+/* ============================================================
+   ÉCRANS
+   ============================================================ */
+.screen { height: 100vh; height: 100dvh; width: 100%; }
+
+#screen-login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+#screen-login::before {
+  content: '';
+  position: absolute;
+  top: 16%;
+  left: 50%;
+  width: 480px;
+  height: 480px;
+  transform: translateX(-50%);
+  background: radial-gradient(circle, rgba(228,164,92,0.16) 0%, rgba(228,164,92,0) 70%);
+  pointer-events: none;
+}
+
+.login-card { position: relative; width: 100%; max-width: 380px; text-align: center; }
+
+.brand {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 42px;
+  letter-spacing: 0.01em;
+  background: linear-gradient(135deg, var(--ember-soft), var(--ember-deep));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: 8px;
+}
+
+.tagline { color: var(--mist); font-size: 14.5px; margin-bottom: 40px; letter-spacing: 0.01em; }
+
+#login-form { display: flex; flex-direction: column; gap: 14px; }
+
+.text-input {
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  font-size: 15.5px;
+  color: var(--paper);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.text-input::placeholder { color: var(--mist-dim); }
+.text-input:focus { border-color: var(--ember-deep); box-shadow: 0 0 0 3px rgba(228,164,92,0.15); outline: none; }
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--ember), var(--ember-deep));
+  color: #201306;
+  font-weight: 600;
+  font-size: 15.5px;
+  padding: 14px 20px;
+  border-radius: var(--radius-sm);
+  transition: transform .15s ease, box-shadow .15s ease;
+  box-shadow: 0 8px 24px rgba(184,117,47,0.28);
+}
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(184,117,47,0.4); }
+.btn-primary:active { transform: translateY(0); }
+
+.error-text { color: var(--danger); font-size: 13.5px; text-align: left; }
+
+.hint { margin-top: 28px; color: var(--mist-dim); font-size: 13px; }
+.hint strong { color: var(--mist); font-weight: 500; font-family: var(--font-mono); }
+
+.config-warning { text-align: left; background: var(--panel); border: 1px solid var(--wine); border-radius: var(--radius); padding: 28px; }
+.config-warning .warning-title { font-family: var(--font-display); font-weight: 600; font-size: 21px; color: var(--ember-soft); margin-bottom: 4px; }
+.config-warning p { color: var(--mist); font-size: 14px; margin-top: 12px; line-height: 1.6; }
+.config-warning code { font-family: var(--font-mono); background: var(--slate); padding: 2px 6px; border-radius: 4px; color: var(--ember-soft); font-size: 13px; }
+
+/* ============================================================
+   ÉCRAN CHAT — STRUCTURE
+   ============================================================ */
+#screen-chat { display: flex; flex-direction: column; }
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-soft);
+  background: rgba(18,21,29,0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  flex-shrink: 0;
+  z-index: 5;
+  gap: 10px;
+}
+
+.room-pill { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--border); padding: 8px 14px; border-radius: 999px; transition: border-color .15s ease; max-width: 100%; overflow: hidden; }
+.room-pill:hover { border-color: var(--ember-deep); }
+.room-icon { color: var(--mist-dim); font-weight: 600; flex-shrink: 0; }
+#current-room-name { font-family: var(--font-mono); font-size: 13.5px; font-weight: 500; letter-spacing: 0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.online-badge { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mist); padding-left: 10px; border-left: 1px solid var(--border); flex-shrink: 0; white-space: nowrap; }
+
+.presence-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--ember);
+  box-shadow: 0 0 6px 1px rgba(228,164,92,0.7);
+  animation: glow-pulse 2.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes glow-pulse {
+  0%, 100% { opacity: .55; box-shadow: 0 0 4px 0px rgba(228,164,92,.45); }
+  50% { opacity: 1; box-shadow: 0 0 9px 2px rgba(228,164,92,.85); }
+}
+
+.user-info { display: flex; align-items: center; gap: 8px; position: relative; flex-shrink: 0; }
+#current-username-display { font-weight: 500; font-size: 14.5px; }
+
+.icon-btn { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 50%; color: var(--mist); transition: background .15s ease, color .15s ease; flex-shrink: 0; }
+.icon-btn:hover { background: var(--slate); color: var(--paper); }
+.icon-btn svg { width: 18px; height: 18px; }
+
+.user-menu-dropdown, .emoji-picker {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  z-index: 20;
+  animation: pop-in .15s ease;
+}
+@keyframes pop-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+.menu-item { display: block; width: 100%; text-align: left; padding: 11px 16px; font-size: 14px; color: var(--paper); white-space: nowrap; transition: background .12s ease; }
+.menu-item:hover { background: var(--slate); }
+.menu-item.danger { color: var(--wine-soft); }
+
+.connection-banner { background: var(--wine); color: #fff0f2; text-align: center; font-size: 13px; padding: 8px; flex-shrink: 0; }
+
+.messages-wrap { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+.messages { flex: 1; min-height: 0; overflow-y: auto; padding: 24px 20px; display: flex; flex-direction: column; gap: 14px; scroll-behavior: smooth; }
+
+.state-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 40px; color: var(--mist-dim); font-size: 14px; pointer-events: none; line-height: 1.6; }
+
+/* ============================================================
+   MESSAGES
+   ============================================================ */
+.message { display: flex; max-width: 78%; opacity: 0; transform: translateY(10px); }
+.message.appear { opacity: 1; transform: translateY(0); transition: opacity .35s ease, transform .35s ease; }
+.message-mine { align-self: flex-end; }
+.message-other { align-self: flex-start; }
+
+.bubble { border-radius: var(--radius); padding: 11px 15px; position: relative; }
+.message-mine .bubble { background: linear-gradient(135deg, var(--ember-deep), #8a5a24); color: #fdf3e4; border-bottom-right-radius: 6px; }
+.message-mine .bubble.appear-glow { animation: warm-arrive .7s ease; }
+@keyframes warm-arrive { 0% { box-shadow: 0 0 0 0 rgba(228,164,92,0.55); } 100% { box-shadow: 0 0 0 14px rgba(228,164,92,0); } }
+.message-other .bubble { background: var(--slate); border: 1px solid var(--border-soft); border-bottom-left-radius: 6px; }
+
+.msg-author { font-size: 12px; font-weight: 600; color: var(--ember-soft); margin-bottom: 3px; letter-spacing: 0.01em; }
+.msg-text { font-size: 15px; line-height: 1.48; white-space: pre-wrap; word-break: break-word; }
+.msg-image { max-width: 100%; max-height: 320px; border-radius: 12px; display: block; cursor: zoom-in; margin-bottom: 4px; }
+.msg-time { font-size: 11px; margin-top: 5px; opacity: .6; font-family: var(--font-mono); }
+.message-mine .msg-time { text-align: right; color: #fdf3e4; }
+.message-other .msg-time { color: var(--mist-dim); }
+
+.system-message { align-self: center; font-size: 12.5px; color: var(--mist-dim); font-style: italic; padding: 4px 14px; opacity: 0; transform: translateY(6px); }
+.system-message.appear { opacity: 1; transform: translateY(0); transition: opacity .35s ease, transform .35s ease; }
+
+.typing-indicator { display: flex; align-items: center; gap: 8px; padding: 4px 24px 8px; font-size: 12.5px; color: var(--mist); flex-shrink: 0; }
+.typing-dots { display: flex; gap: 3px; }
+.typing-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ember); animation: ember-breathe 1.2s ease-in-out infinite; }
+.typing-dot:nth-child(2) { animation-delay: .2s; }
+.typing-dot:nth-child(3) { animation-delay: .4s; }
+@keyframes ember-breathe { 0%, 100% { opacity: .3; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.2); } }
+
+.scroll-bottom-btn {
+  position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+  background: var(--panel); border: 1px solid var(--border); color: var(--paper);
+  padding: 8px 16px; border-radius: 999px; font-size: 12.5px; box-shadow: var(--shadow);
+  z-index: 8; animation: pop-in .15s ease;
+}
+
+.upload-progress { height: 3px; background: var(--slate); flex-shrink: 0; overflow: hidden; }
+.upload-progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--ember-deep), var(--ember)); transition: width .2s ease; }
+
+/* ============================================================
+   COMPOSITEUR
+   ============================================================ */
+.composer {
+  display: flex; align-items: flex-end; gap: 8px;
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border-soft);
+  flex-shrink: 0; position: relative; background: var(--night-2);
+}
+
+.composer textarea {
+  flex: 1; resize: none; background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 11px 14px; font-size: 15px; line-height: 1.4;
+  max-height: 140px; transition: border-color .15s ease;
+}
+.composer textarea::placeholder { color: var(--mist-dim); }
+.composer textarea:focus { border-color: var(--ember-deep); outline: none; }
+.composer .icon-btn { margin-bottom: 2px; }
+
+.btn-send {
+  width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%;
+  background: linear-gradient(135deg, var(--ember), var(--ember-deep)); color: #201306;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .15s ease; margin-bottom: 2px;
+}
+.btn-send:hover { transform: scale(1.05); }
+.btn-send:active { transform: scale(.95); }
+.btn-send svg { width: 18px; height: 18px; }
+
+.emoji-picker {
+  bottom: calc(100% + 8px); top: auto; left: 0; right: auto;
+  width: 260px; max-height: 220px; overflow-y: auto;
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; padding: 10px;
+}
+.emoji-btn { font-size: 19px; padding: 5px; border-radius: 6px; transition: background .12s ease; line-height: 1; }
+.emoji-btn:hover { background: var(--slate); }
+
+/* ============================================================
+   MODALE SALONS
+   ============================================================ */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(6,7,10,0.72);
+  backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center;
+  z-index: 50; padding: 20px; animation: fade-in .15s ease;
+}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.modal { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg); width: 100%; max-width: 400px; padding: 28px; position: relative; box-shadow: var(--shadow); animation: pop-in .2s ease; }
+
+.modal-close { position: absolute; top: 16px; right: 16px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; color: var(--mist); border-radius: 50%; }
+.modal-close:hover { background: var(--slate); color: var(--paper); }
+.modal-close svg { width: 16px; height: 16px; }
+
+.modal h2 { font-family: var(--font-display); font-weight: 600; font-size: 22px; margin-bottom: 20px; color: var(--ember-soft); }
+
+.modal-tabs { display: flex; gap: 4px; background: var(--slate); padding: 4px; border-radius: var(--radius-sm); margin-bottom: 20px; }
+.tab { flex: 1; padding: 9px; border-radius: 8px; font-size: 13.5px; font-weight: 500; color: var(--mist); transition: background .15s ease, color .15s ease; }
+.tab.active { background: var(--ember-deep); color: #fdf3e4; }
+
+.tab-panel { display: flex; flex-direction: column; gap: 12px; }
+.tab-panel p { color: var(--mist); font-size: 13.5px; line-height: 1.55; }
+
+.btn-secondary { background: var(--slate); border: 1px solid var(--border); color: var(--paper); padding: 12px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 500; transition: border-color .15s ease; }
+.btn-secondary:hover { border-color: var(--ember-deep); }
+
+.btn-link { color: var(--mist); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; align-self: center; }
+.btn-link:hover { color: var(--paper); }
+
+#created-room-result { display: flex; flex-direction: column; gap: 10px; }
+.room-code-display { font-family: var(--font-mono); font-size: 20px; letter-spacing: 0.12em; text-align: center; color: var(--ember-soft); background: var(--slate); padding: 10px; border-radius: var(--radius-sm); }
+.link-row { display: flex; gap: 8px; }
+.link-row input { flex: 1; min-width: 0; background: var(--slate); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 12.5px; font-family: var(--font-mono); color: var(--mist); }
+
+/* ============================================================
+   LIGHTBOX & TOASTS
+   ============================================================ */
+.lightbox { position: fixed; inset: 0; background: rgba(4,5,8,0.92); display: flex; align-items: center; justify-content: center; z-index: 60; padding: 30px; cursor: zoom-out; animation: fade-in .15s ease; }
+.lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; box-shadow: var(--shadow); }
+
+.toast-container { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 80; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+.toast { background: var(--panel); border: 1px solid var(--border); color: var(--paper); padding: 11px 18px; border-radius: 999px; font-size: 13.5px; box-shadow: var(--shadow); opacity: 0; transform: translateY(8px); transition: opacity .25s ease, transform .25s ease; }
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast-error { border-color: var(--wine); }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 640px) {
+  .chat-header { padding: 12px 14px; }
+  #current-username-display { display: none; }
+  .messages { padding: 18px 14px; }
+  .message { max-width: 88%; }
+  .composer { padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); }
+  .modal { padding: 22px; }
+  .emoji-picker { width: 100%; left: 0; right: 0; grid-template-columns: repeat(6, 1fr); }
+  .brand { font-size: 34px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     ÉCRAN 1 — CONNEXION (pseudo)
+     ============================================================ -->
+<section id="screen-login" class="screen">
+  <div class="login-card">
+    <h1 class="brand">Lueur</h1>
+    <p class="tagline">Un salon de discussion pour la nuit.</p>
+    <form id="login-form" novalidate>
+      <input
+        type="text"
+        id="username-input"
+        class="text-input"
+        placeholder="Votre pseudo"
+        maxlength="24"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+      >
+      <p id="login-error" class="error-text hidden"></p>
+      <button type="submit" class="btn-primary">Entrer dans le salon</button>
+    </form>
+    <p class="hint">Salon : <strong id="room-preview-label">Public</strong></p>
+  </div>
+</section>
+
+<!-- ============================================================
+     ÉCRAN 2 — SALON DE DISCUSSION
+     ============================================================ -->
+<section id="screen-chat" class="screen hidden">
+
+  <header class="chat-header">
+    <button id="btn-room-switch" class="room-pill" type="button">
+      <span class="room-icon">#</span>
+      <span id="current-room-name">Public</span>
+      <span class="online-badge"><span class="presence-dot"></span><span id="online-count">0 en ligne</span></span>
+    </button>
+
+    <div class="user-info">
+      <span id="current-username-display"></span>
+      <button id="btn-user-menu" class="icon-btn" type="button" aria-label="Menu utilisateur">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.5-6.5 8-6.5s8 2.5 8 6.5"/></svg>
+      </button>
+      <div id="user-menu-dropdown" class="user-menu-dropdown hidden">
+        <button id="btn-change-username" class="menu-item" type="button">Changer de pseudo</button>
+        <button id="btn-logout" class="menu-item danger" type="button">Se déconnecter</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="connection-banner" class="connection-banner hidden">Connexion perdue — tentative de reconnexion…</div>
+
+  <div class="messages-wrap">
+    <div id="connecting-state" class="state-message">Connexion au salon…</div>
+    <div id="empty-state" class="state-message hidden">Aucun message pour l'instant.<br>Soyez le premier à écrire.</div>
+    <main id="messages" class="messages" aria-live="polite" aria-label="Messages du salon"></main>
+    <button id="btn-scroll-bottom" class="scroll-bottom-btn hidden" type="button">↓ Nouveaux messages</button>
+  </div>
+
+  <div id="typing-indicator" class="typing-indicator hidden">
+    <span class="typing-dots"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></span>
+    <span id="typing-label"></span>
+  </div>
+
+  <div id="upload-progress" class="upload-progress hidden"><div class="upload-progress-fill"></div></div>
+
+  <form id="composer" class="composer">
+    <button id="btn-attach" class="icon-btn" type="button" aria-label="Joindre une image">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5L12.5 20a4.5 4.5 0 01-6.36-6.36L14.5 5.28a3 3 0 014.24 4.24L10.4 17.86a1.5 1.5 0 01-2.12-2.12l7.78-7.78"/></svg>
+    </button>
+    <input type="file" id="file-input" accept="image/*" hidden>
+
+    <button id="btn-emoji" class="icon-btn" type="button" aria-label="Emoji">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14s1.5 2 3.5 2 3.5-2 3.5-2"/><path d="M9 9.5h.01M15 9.5h.01"/></svg>
+    </button>
+    <div id="emoji-picker" class="emoji-picker hidden"></div>
+
+    <textarea id="msg-input" placeholder="Écrivez un message…" rows="1" maxlength="2000"></textarea>
+
+    <button type="submit" class="btn-send" aria-label="Envoyer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12L20 4L14 20L11 13L4 12Z"/></svg>
+    </button>
+  </form>
+</section>
+
+<!-- ============================================================
+     MODALE — SALONS (rejoindre / créer)
+     ============================================================ -->
+<div id="modal-room" class="modal-overlay hidden">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Gestion des salons">
+    <button id="btn-close-modal" class="modal-close" type="button" aria-label="Fermer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <h2>Salons</h2>
+    <div class="modal-tabs">
+      <button class="tab active" data-tab="join" type="button">Rejoindre</button>
+      <button class="tab" data-tab="create" type="button">Créer</button>
+    </div>
+
+    <div id="tab-join" class="tab-panel">
+      <input type="text" id="join-room-code" class="text-input" placeholder="Code du salon (ex : A1B2C3)" maxlength="24" autocomplete="off" autocapitalize="off">
+      <button id="btn-join-room" class="btn-primary" type="button">Rejoindre le salon</button>
+      <button id="btn-go-public" class="btn-link" type="button">← Retour au salon public</button>
+    </div>
+
+    <div id="tab-create" class="tab-panel hidden">
+      <p>Générez un salon privé et partagez le code ou le lien avec vos amis. Il est privé par obscurité du code, pas par un vrai contrôle d'accès.</p>
+      <button id="btn-create-room" class="btn-secondary" type="button">Générer un salon</button>
+      <div id="created-room-result" class="hidden">
+        <div id="created-room-code" class="room-code-display"></div>
+        <div class="link-row">
+          <input type="text" id="created-room-link" readonly>
+          <button id="btn-copy-link" class="icon-btn" type="button" aria-label="Copier le lien">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 012-2h10"/></svg>
+          </button>
+        </div>
+        <button id="btn-goto-created-room" class="btn-primary" type="button">Aller dans ce salon →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     LIGHTBOX (aperçu image plein écran)
+     ============================================================ -->
+<div id="lightbox" class="lightbox hidden">
+  <img id="lightbox-img" src="" alt="Aperçu de l'image">
+</div>
+
+<div id="toast-container" class="toast-container"></div>
+
+<script type="module">
+/* ============================================================
+   IMPORTS FIREBASE (SDK modulaire, via CDN)
+   ============================================================ */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
+import {
+  getDatabase, ref, push, set, remove, onValue, onChildAdded, onChildRemoved,
+  onDisconnect, serverTimestamp, query, limitToLast
+} from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
+import {
+  getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL
+} from "https://www.gstatic.com/firebasejs/12.17.1/firebase-storage.js";
+
+/* ============================================================
+   CONFIGURATION FIREBASE — remplacez ces valeurs par les vôtres
+   (voir les instructions tout en haut du fichier)
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "VOTRE_API_KEY",
+  authDomain: "VOTRE_PROJET.firebaseapp.com",
+  databaseURL: "https://VOTRE_PROJET-default-rtdb.REGION.firebasedatabase.app",
+  projectId: "VOTRE_PROJET",
+  storageBucket: "VOTRE_PROJET.firebasestorage.app",
+  messagingSenderId: "VOTRE_SENDER_ID",
+  appId: "VOTRE_APP_ID"
+};
+
+const CONFIG_IS_PLACEHOLDER = firebaseConfig.apiKey === "VOTRE_API_KEY";
+
+/* ============================================================
+   ÉTAT GLOBAL
+   ============================================================ */
+let db, storage;
+let currentUsername = '';
+let currentRoomId = 'public';
+let mySessionId = '';
+let typingClearTimeout = null;
+let isTypingActive = false;
+let hasConnectedOnce = false;
+
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+/* ============================================================
+   UTILITAIRES
+   ============================================================ */
+function $(id) { return document.getElementById(id); }
+
+function generateId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'id-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+}
+
+function generateRoomCode(length = 6) {
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // exclut 0/O/1/I/L (ambigus)
+  let code = '';
+  for (let i = 0; i < length; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+function sanitizeRoomId(raw) {
+  if (!raw) return 'public';
+  const cleaned = raw.toUpperCase().replace(/[^A-Z0-9\-_]/g, '').slice(0, 24);
+  if (!cleaned || cleaned === 'PUBLIC') return 'public';
+  return cleaned;
+}
+
+function sanitizeFileName(name) {
+  const clean = (name || 'image').replace(/[^a-zA-Z0-9.\-_]/g, '_');
+  return clean.slice(-60);
+}
+
+function formatTimestamp(ts) {
+  if (!ts) return '';
+  const date = new Date(ts);
+  const now = new Date();
+  const diffMin = Math.floor((now - date) / 60000);
+  if (diffMin < 1) return "à l'instant";
+  if (diffMin < 60) return `il y a ${diffMin} min`;
+  const sameDay = date.toDateString() === now.toDateString();
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  if (sameDay) return `${hh}:${mm}`;
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mo = String(date.getMonth() + 1).padStart(2, '0');
+  return `${dd}/${mo} ${hh}:${mm}`;
+}
+
+function showToast(message, isError = false) {
+  const container = $('toast-container');
+  const toast = document.createElement('div');
+  toast.className = 'toast' + (isError ? ' toast-error' : '');
+  toast.textContent = message;
+  container.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('show'));
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 3200);
+}
+
+function isNearBottom() {
+  const el = $('messages');
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 140;
+}
+
+function scrollToBottom() {
+  const el = $('messages');
+  el.scrollTop = el.scrollHeight;
+  $('btn-scroll-bottom').classList.add('hidden');
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+  $(id).classList.remove('hidden');
+}
+
+/* ============================================================
+   INITIALISATION
+   ============================================================ */
+function initApp() {
+  const params = new URLSearchParams(location.search);
+  currentRoomId = sanitizeRoomId(params.get('room'));
+
+  mySessionId = sessionStorage.getItem('lueur_session_id') || generateId();
+  sessionStorage.setItem('lueur_session_id', mySessionId);
+
+  $('room-preview-label').textContent = currentRoomId === 'public' ? 'Public' : currentRoomId;
+
+  if (CONFIG_IS_PLACEHOLDER) {
+    showConfigWarning();
+    return;
+  }
+
+  const app = initializeApp(firebaseConfig);
+  db = getDatabase(app);
+  storage = getStorage(app);
+
+  const prefill = sessionStorage.getItem('lueur_prefill_username');
+  if (prefill) {
+    $('username-input').value = prefill;
+    sessionStorage.removeItem('lueur_prefill_username');
+  }
+
+  wireLoginForm();
+
+  const savedUsername = localStorage.getItem('lueur_username');
+  if (savedUsername) {
+    currentUsername = savedUsername;
+    enterChat();
+  } else {
+    $('username-input').focus();
+  }
+}
+
+function showConfigWarning() {
+  $('screen-login').innerHTML = `
+    <div class="login-card config-warning">
+      <div class="warning-title">⚠️ Configuration requise</div>
+      <p>Ce salon utilise Firebase, mais la configuration n'a pas encore été renseignée.</p>
+      <p>Ouvrez <code>index.html</code>, repérez le bloc <code>firebaseConfig</code> (Ctrl+F « VOTRE_API_KEY ») et collez-y les valeurs de votre projet Firebase.</p>
+      <p>Le guide complet est dans les commentaires tout en haut du fichier.</p>
+    </div>
+  `;
+}
+
+/* ============================================================
+   CONNEXION (pseudo)
+   ============================================================ */
+function wireLoginForm() {
+  $('login-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = $('username-input').value.trim().slice(0, 24);
+    if (!name) {
+      $('login-error').textContent = 'Choisissez un pseudo pour continuer.';
+      $('login-error').classList.remove('hidden');
+      return;
+    }
+    currentUsername = name;
+    localStorage.setItem('lueur_username', name);
+    enterChat();
+  });
+}
+
+/* ============================================================
+   ENTRÉE DANS LE SALON
+   ============================================================ */
+function enterChat() {
+  showScreen('screen-chat');
+  $('current-username-display').textContent = currentUsername;
+  updateRoomLabel();
+  setupRoom(currentRoomId);
+  wireComposer();
+  wireRoomModal();
+  wireUserMenu();
+  wireLightbox();
+  buildEmojiPicker();
+  wireGlobalKeys();
+  setInterval(refreshTimestamps, 60000);
+}
+
+function updateRoomLabel() {
+  $('current-room-name').textContent = currentRoomId === 'public' ? 'Public' : currentRoomId;
+}
+
+/* ============================================================
+   SALON — MESSAGES, PRÉSENCE, FRAPPE
+   ============================================================ */
+function setupRoom(roomId) {
+  const messagesRef = ref(db, `rooms/${roomId}/messages`);
+  const recentQuery = query(messagesRef, limitToLast(150));
+
+  onChildAdded(recentQuery, (snapshot) => {
+    hideConnectingState();
+    renderMessage(snapshot.key, snapshot.val());
+  });
+  onChildRemoved(recentQuery, (snapshot) => {
+    removeMessageEl(snapshot.key);
+  });
+
+  setTimeout(hideConnectingState, 1500); // filet de sécurité si le salon est vide
+
+  setupPresence(roomId);
+  setupTypingListener(roomId);
+  announceJoin(roomId);
+}
+
+function hideConnectingState() {
+  $('connecting-state').classList.add('hidden');
+  updateEmptyState();
+}
+
+function updateEmptyState() {
+  const hasContent = $('messages').children.length > 0;
+  $('empty-state').classList.toggle('hidden', hasContent);
+}
+
+function setupPresence(roomId) {
+  const myPresenceRef = ref(db, `rooms/${roomId}/presence/${mySessionId}`);
+  const connectedRef = ref(db, '.info/connected');
+
+  onValue(connectedRef, (snap) => {
+    if (snap.val() === true) {
+      hasConnectedOnce = true;
+      set(myPresenceRef, { user: currentUsername, lastActive: serverTimestamp() });
+      onDisconnect(myPresenceRef).remove();
+      $('connection-banner').classList.add('hidden');
+    } else if (hasConnectedOnce) {
+      $('connection-banner').classList.remove('hidden');
+    }
+  });
+
+  const presenceListRef = ref(db, `rooms/${roomId}/presence`);
+  onValue(presenceListRef, (snap) => {
+    const count = snap.exists() ? Object.keys(snap.val()).length : 0;
+    $('online-count').textContent = `${count} en ligne`;
+  });
+}
+
+function announceJoin(roomId) {
+  const messagesRef = ref(db, `rooms/${roomId}/messages`);
+
+  // La clé du message de départ est réservée maintenant ; son contenu ne
+  // s'écrira que si la connexion tombe (onDisconnect), sans intervention JS.
+  const leaveMsgRef = push(messagesRef);
+  onDisconnect(leaveMsgRef).set({
+    type: 'system',
+    text: `${currentUsername} a quitté le salon`,
+    timestamp: serverTimestamp()
+  });
+
+  push(messagesRef, {
+    type: 'system',
+    text: `${currentUsername} a rejoint le salon`,
+    timestamp: serverTimestamp()
+  });
+}
+
+function setupTypingListener(roomId) {
+  const typingRef = ref(db, `rooms/${roomId}/typing`);
+  onValue(typingRef, (snap) => {
+    const data = snap.val() || {};
+    const now = Date.now();
+    const others = Object.entries(data)
+      .filter(([sid, v]) => sid !== mySessionId && v && v.timestamp && (now - v.timestamp) < 8000)
+      .map(([, v]) => v.user);
+    renderTypingIndicator(others);
+  });
+}
+
+function renderTypingIndicator(names) {
+  const el = $('typing-indicator');
+  if (names.length === 0) { el.classList.add('hidden'); return; }
+  let label;
+  if (names.length === 1) label = `${names[0]} écrit…`;
+  else if (names.length === 2) label = `${names[0]} et ${names[1]} écrivent…`;
+  else label = `Plusieurs personnes écrivent…`;
+  $('typing-label').textContent = label;
+  el.classList.remove('hidden');
+}
+
+/* ============================================================
+   RENDU DES MESSAGES
+   ============================================================ */
+function renderMessage(key, data) {
+  if (!data) return;
+  if (document.querySelector(`[data-key="${CSS.escape(key)}"]`)) return;
+
+  const isMine = data.senderId === mySessionId;
+  const wasNearBottom = isNearBottom();
+
+  const el = document.createElement('div');
+  el.dataset.key = key;
+
+  if (data.type === 'system') {
+    el.className = 'system-message';
+    el.textContent = data.text || '';
+  } else {
+    el.className = 'message ' + (isMine ? 'message-mine' : 'message-other');
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    if (isMine) bubble.classList.add('appear-glow');
+
+    if (!isMine) {
+      const author = document.createElement('div');
+      author.className = 'msg-author';
+      author.textContent = data.user || 'Anonyme';
+      bubble.appendChild(author);
+    }
+
+    if (data.type === 'image' && data.imageURL) {
+      const img = document.createElement('img');
+      img.src = data.imageURL;
+      img.className = 'msg-image';
+      img.alt = `Image envoyée par ${data.user || 'un participant'}`;
+      img.loading = 'lazy';
+      img.addEventListener('click', () => openLightbox(data.imageURL));
+      bubble.appendChild(img);
+    } else {
+      const textEl = document.createElement('div');
+      textEl.className = 'msg-text';
+      textEl.textContent = data.text || '';
+      bubble.appendChild(textEl);
+    }
+
+    const timeEl = document.createElement('div');
+    timeEl.className = 'msg-time';
+    timeEl.dataset.ts = data.timestamp || '';
+    timeEl.textContent = formatTimestamp(data.timestamp);
+    bubble.appendChild(timeEl);
+
+    el.appendChild(bubble);
+  }
+
+  $('messages').appendChild(el);
+  requestAnimationFrame(() => el.classList.add('appear'));
+
+  if (wasNearBottom || isMine) {
+    scrollToBottom();
+  } else if (data.type !== 'system') {
+    $('btn-scroll-bottom').classList.remove('hidden');
+  }
+  updateEmptyState();
+}
+
+function removeMessageEl(key) {
+  const el = document.querySelector(`[data-key="${CSS.escape(key)}"]`);
+  if (el) el.remove();
+  updateEmptyState();
+}
+
+function refreshTimestamps() {
+  document.querySelectorAll('.msg-time').forEach(el => {
+    const ts = Number(el.dataset.ts);
+    if (ts) el.textContent = formatTimestamp(ts);
+  });
+}
+
+/* ============================================================
+   ENVOI — TEXTE & IMAGES
+   ============================================================ */
+async function sendTextMessage(text) {
+  const messagesRef = ref(db, `rooms/${currentRoomId}/messages`);
+  try {
+    await push(messagesRef, {
+      type: 'text',
+      user: currentUsername,
+      senderId: mySessionId,
+      text: text.slice(0, 2000),
+      timestamp: serverTimestamp()
+    });
+  } catch (err) {
+    console.error(err);
+    showToast("Le message n'a pas pu être envoyé.", true);
+  }
+}
+
+function sendImageMessage(file) {
+  if (!file.type || !file.type.startsWith('image/')) {
+    showToast('Seules les images sont acceptées.', true);
+    return;
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    showToast('Image trop lourde (8 Mo max).', true);
+    return;
+  }
+
+  const path = `rooms/${currentRoomId}/images/${Date.now()}_${sanitizeFileName(file.name)}`;
+  const imgRef = storageRef(storage, path);
+  const task = uploadBytesResumable(imgRef, file);
+
+  showUploadProgress(0);
+
+  task.on('state_changed',
+    (snapshot) => {
+      const pct = snapshot.totalBytes ? (snapshot.bytesTransferred / snapshot.totalBytes) * 100 : 0;
+      showUploadProgress(pct);
+    },
+    (error) => {
+      console.error(error);
+      showToast("L'envoi de l'image a échoué.", true);
+      hideUploadProgress();
+    },
+    async () => {
+      try {
+        const url = await getDownloadURL(task.snapshot.ref);
+        const messagesRef = ref(db, `rooms/${currentRoomId}/messages`);
+        await push(messagesRef, {
+          type: 'image',
+          user: currentUsername,
+          senderId: mySessionId,
+          imageURL: url,
+          timestamp: serverTimestamp()
+        });
+      } catch (err) {
+        console.error(err);
+        showToast("L'envoi de l'image a échoué.", true);
+      } finally {
+        hideUploadProgress();
+      }
+    }
+  );
+}
+
+function showUploadProgress(pct) {
+  const bar = $('upload-progress');
+  bar.classList.remove('hidden');
+  bar.querySelector('.upload-progress-fill').style.width = pct + '%';
+}
+function hideUploadProgress() {
+  $('upload-progress').classList.add('hidden');
+  $('upload-progress').querySelector('.upload-progress-fill').style.width = '0%';
+}
+
+/* ============================================================
+   FRAPPE (typing indicator)
+   ============================================================ */
+function onComposerInput() {
+  autoResizeTextarea();
+  const myTypingRef = ref(db, `rooms/${currentRoomId}/typing/${mySessionId}`);
+
+  set(myTypingRef, { user: currentUsername, timestamp: Date.now() });
+  if (!isTypingActive) {
+    isTypingActive = true;
+    onDisconnect(myTypingRef).remove();
+  }
+
+  clearTimeout(typingClearTimeout);
+  typingClearTimeout = setTimeout(() => {
+    isTypingActive = false;
+    remove(myTypingRef);
+  }, 3000);
+}
+
+function clearTypingStatus() {
+  clearTimeout(typingClearTimeout);
+  isTypingActive = false;
+  const myTypingRef = ref(db, `rooms/${currentRoomId}/typing/${mySessionId}`);
+  remove(myTypingRef);
+}
+
+function autoResizeTextarea() {
+  const input = $('msg-input');
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+}
+
+/* ============================================================
+   COMPOSITEUR — ÉVÉNEMENTS
+   ============================================================ */
+function wireComposer() {
+  const form = $('composer');
+  const input = $('msg-input');
+  const fileInput = $('file-input');
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    sendTextMessage(text);
+    input.value = '';
+    autoResizeTextarea();
+    clearTypingStatus();
+  });
+
+  input.addEventListener('input', onComposerInput);
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
+  input.addEventListener('paste', (e) => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type && item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) sendImageMessage(file);
+        break;
+      }
+    }
+  });
+
+  $('btn-attach').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) sendImageMessage(file);
+    fileInput.value = '';
+  });
+
+  $('btn-scroll-bottom').addEventListener('click', scrollToBottom);
+
+  $('btn-emoji').addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('emoji-picker').classList.toggle('hidden');
+  });
+  document.addEventListener('click', (e) => {
+    if (!$('emoji-picker').contains(e.target) && !$('btn-emoji').contains(e.target)) {
+      $('emoji-picker').classList.add('hidden');
+    }
+  });
+}
+
+/* ============================================================
+   EMOJIS
+   ============================================================ */
+const EMOJI_LIST = ['😀','😂','🥹','😍','😎','🥳','😢','😡','🤔','😱','😴','🙌','👍','👎','🙏','👏','🤝','❤️','🖤','💜','🔥','✨','⭐','🌙','⚡','💀','☠️','👻','🎉','🎮','🎧','📸','☕','🍷','🥃','🍀','🌹','💯','✅','❌','😏','😉','🥲','😤','🤯','🫡','🦇','🕯️'];
+
+function buildEmojiPicker() {
+  const picker = $('emoji-picker');
+  EMOJI_LIST.forEach(emoji => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'emoji-btn';
+    btn.textContent = emoji;
+    btn.addEventListener('click', () => insertEmoji(emoji));
+    picker.appendChild(btn);
+  });
+}
+
+function insertEmoji(emoji) {
+  const input = $('msg-input');
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  input.value = input.value.slice(0, start) + emoji + input.value.slice(end);
+  const newPos = start + emoji.length;
+  input.focus();
+  input.setSelectionRange(newPos, newPos);
+  autoResizeTextarea();
+}
+
+/* ============================================================
+   SALONS — MODALE, CRÉATION, NAVIGATION
+   ============================================================ */
+function navigateToRoom(roomId) {
+  const url = new URL(location.href);
+  url.search = '';
+  if (roomId && roomId !== 'public') url.searchParams.set('room', roomId);
+  location.href = url.toString();
+}
+
+function openRoomModal() { $('modal-room').classList.remove('hidden'); }
+function closeRoomModal() { $('modal-room').classList.add('hidden'); }
+
+function wireRoomModal() {
+  $('btn-room-switch').addEventListener('click', openRoomModal);
+  $('btn-close-modal').addEventListener('click', closeRoomModal);
+  $('modal-room').addEventListener('click', (e) => {
+    if (e.target === $('modal-room')) closeRoomModal();
+  });
+
+  document.querySelectorAll('.modal-tabs .tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.modal-tabs .tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const target = tab.dataset.tab;
+      $('tab-join').classList.toggle('hidden', target !== 'join');
+      $('tab-create').classList.toggle('hidden', target !== 'create');
+    });
+  });
+
+  $('btn-join-room').addEventListener('click', () => {
+    const raw = $('join-room-code').value.trim();
+    if (!raw) { showToast('Entrez un code de salon.', true); return; }
+    navigateToRoom(sanitizeRoomId(raw));
+  });
+
+  $('btn-go-public').addEventListener('click', () => navigateToRoom('public'));
+
+  $('btn-create-room').addEventListener('click', () => {
+    const code = generateRoomCode();
+    const url = new URL(location.href);
+    url.search = '';
+    url.searchParams.set('room', code);
+    $('created-room-code').textContent = code;
+    $('created-room-link').value = url.toString();
+    $('created-room-result').classList.remove('hidden');
+  });
+
+  $('btn-copy-link').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText($('created-room-link').value);
+      showToast('Lien copié.');
+    } catch {
+      $('created-room-link').select();
+      showToast('Sélectionnez et copiez le lien.', true);
+    }
+  });
+
+  $('btn-goto-created-room').addEventListener('click', () => {
+    location.href = $('created-room-link').value;
+  });
+}
+
+/* ============================================================
+   MENU UTILISATEUR
+   ============================================================ */
+function wireUserMenu() {
+  $('btn-user-menu').addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('user-menu-dropdown').classList.toggle('hidden');
+  });
+  document.addEventListener('click', () => $('user-menu-dropdown').classList.add('hidden'));
+
+  $('btn-change-username').addEventListener('click', () => {
+    sessionStorage.setItem('lueur_prefill_username', currentUsername);
+    localStorage.removeItem('lueur_username');
+    location.reload();
+  });
+
+  $('btn-logout').addEventListener('click', () => {
+    localStorage.removeItem('lueur_username');
+    const url = new URL(location.href);
+    url.search = '';
+    location.href = url.toString();
+  });
+}
+
+/* ============================================================
+   LIGHTBOX
+   ============================================================ */
+function wireLightbox() {
+  $('lightbox').addEventListener('click', closeLightbox);
+}
+function openLightbox(url) {
+  $('lightbox-img').src = url;
+  $('lightbox').classList.remove('hidden');
+}
+function closeLightbox() {
+  $('lightbox').classList.add('hidden');
+  $('lightbox-img').src = '';
+}
+
+/* ============================================================
+   RACCOURCIS CLAVIER GLOBAUX
+   ============================================================ */
+function wireGlobalKeys() {
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeLightbox();
+      closeRoomModal();
+      $('emoji-picker').classList.add('hidden');
+      $('user-menu-dropdown').classList.add('hidden');
+    }
+  });
+}
+
+/* ============================================================
+   DÉMARRAGE
+   ============================================================ */
+initApp();
+</script>
+
+<!-- ============================================================
+     RÈGLES DE SÉCURITÉ PLUS STRICTES (optionnel, à durcir plus tard)
+     ============================================================
+
+     Realtime Database → onglet "Règles" :
+
+     {
+       "rules": {
+         "rooms": {
+           "$roomId": {
+             "messages": {
+               ".read": true,
+               ".write": true,
+               "$messageId": {
+                 ".validate": "newData.hasChildren(['type','timestamp'])"
+               }
+             },
+             "presence": { ".read": true, ".write": true },
+             "typing": { ".read": true, ".write": true }
+           }
+         }
+       }
+     }
+
+     Storage → onglet "Règles" (limite les images à 8 Mo et au type image/*) :
+
+     rules_version = '2';
+     service firebase.storage {
+       match /b/{bucket}/o {
+         match /rooms/{roomId}/images/{fileName} {
+           allow read: if true;
+           allow write: if request.resource.size < 8 * 1024 * 1024
+                        && request.resource.contentType.matches('image/.*');
+         }
+       }
+     }
+     ============================================================ -->
+</body>
+</html>
